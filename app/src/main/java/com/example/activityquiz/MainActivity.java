@@ -1,5 +1,7 @@
 package com.example.activityquiz;
 
+import android.app.Activity;
+import android.content.Intent;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.View;
@@ -7,6 +9,8 @@ import android.widget.Button;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.activity.EdgeToEdge;
 import androidx.appcompat.app.AppCompatActivity;
 
@@ -14,12 +18,14 @@ public class MainActivity extends AppCompatActivity {
 
     private static final String TAG = "QuizActivity";
     private static final String KEY_INDEX = "index";
+    private static final int REQUEST_CODE_CHEAT = 0;
 
     private Button mTrueButton;
     private Button mFalseButton;
     private Button mNextButton;
     private Button mPreviousButton;
     private TextView mQuestionTextView;
+    private Button mCheatButton;
 
     private Question[] mQuestionBank = new Question[]{
             new Question(R.string.question_australia, true),
@@ -30,6 +36,17 @@ public class MainActivity extends AppCompatActivity {
             new Question(R.string.question_asia, true),
     };
     private int mCurrentIndex = 0;
+    private boolean mIsCheater;
+    private ActivityResultLauncher<Intent> mCheatActivityLauncher =
+            registerForActivityResult(
+                    new ActivityResultContracts.StartActivityForResult(),
+                    result -> {
+                        if (result.getResultCode() != Activity.RESULT_OK) return;
+                        Intent data = result.getData();
+                        if (data == null) return;
+                        mIsCheater = CheatActivity.wasAnswerShown(data);
+                    }
+            );
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -43,6 +60,7 @@ public class MainActivity extends AppCompatActivity {
             Log.d(TAG, "Restored index: " + mCurrentIndex);
         }
 
+
         mQuestionTextView = findViewById(R.id.question_text_view);
         mTrueButton = findViewById(R.id.true_button);
         mFalseButton = findViewById(R.id.false_button);
@@ -50,7 +68,10 @@ public class MainActivity extends AppCompatActivity {
         mPreviousButton = findViewById(R.id.previous_button);
 
         // True button click
+
         mTrueButton.setOnClickListener(new View.OnClickListener() {
+
+
             @Override
             public void onClick(View v) {
                 Log.d(TAG, "True button clicked at index " + mCurrentIndex);
@@ -98,6 +119,7 @@ public class MainActivity extends AppCompatActivity {
             public void onClick(View v) {
                 mCurrentIndex = (mCurrentIndex - 1 + mQuestionBank.length) % mQuestionBank.length;
                 Log.d(TAG, "Previous button clicked. Index now: " + mCurrentIndex);
+                mIsCheater = false;
                 updateQuestion();
 
                 mTrueButton.setEnabled(true);
@@ -109,10 +131,25 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
+        mCheatButton = (Button) findViewById(R.id.cheat_button);
+        mCheatButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+// Start CheatActivity
+                boolean answerIsTrue = mQuestionBank[mCurrentIndex].isAnswerTrue();
+                Intent intent = CheatActivity.newIntent(MainActivity.this, answerIsTrue);
+                mCheatActivityLauncher.launch(intent);
+
+
+            }
+        });
+
 
         // Show first question
         updateQuestion();
     }
+
+
 
     @Override
     public void onStart() {
@@ -158,17 +195,23 @@ public class MainActivity extends AppCompatActivity {
 
     private void checkAnswer(boolean userPressedTrue, Button clickedButton) {
         boolean answerIsTrue = mQuestionBank[mCurrentIndex].isAnswerTrue();
-        if (userPressedTrue == answerIsTrue) {
-            clickedButton.setBackgroundColor(getResources().getColor(android.R.color.holo_green_light));
-            Toast.makeText(this, R.string.correct_toast, Toast.LENGTH_SHORT).show();
+        int messageResId = 0;
+        if (mIsCheater) {
+            messageResId = R.string.judgment_toast;
         } else {
-            clickedButton.setBackgroundColor(getResources().getColor(android.R.color.holo_red_light));
-            Toast.makeText(this, R.string.incorrect_toast, Toast.LENGTH_SHORT).show();
+
+            if (userPressedTrue == answerIsTrue) {
+                clickedButton.setBackgroundColor(getResources().getColor(android.R.color.holo_green_light));
+                Toast.makeText(this, R.string.correct_toast, Toast.LENGTH_SHORT).show();
+            } else {
+                clickedButton.setBackgroundColor(getResources().getColor(android.R.color.holo_red_light));
+                Toast.makeText(this, R.string.incorrect_toast, Toast.LENGTH_SHORT).show();
+            }
+
+            // Disable both buttons after selection
+            mTrueButton.setEnabled(false);
+            mFalseButton.setEnabled(false);
         }
 
-        // Disable both buttons after selection
-        mTrueButton.setEnabled(false);
-        mFalseButton.setEnabled(false);
     }
-
 }
